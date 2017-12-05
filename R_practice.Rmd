@@ -1,30 +1,42 @@
 ---
 title: "CRISPR screening - R practice"
-output: html_notebook
+author: "Olivier Harismendy"
+date: "December 4th 2017"
+output: 
+  html_document:
+    toc: true # table of content true
+    toc_depth: 3  # upto three depths of headings (specified by #, ## and ###)
+    number_sections: true  ## if you want number sections at each table header
+    theme: united  # many options for theme, this one is my favorite.
+    highlight: tango  # specifies the syntax highlighting style
 ---
 
 In this notebook, we will introdcue a few R packages that can be handy to manipulate, summarize and plot the data coming from the PinAPL-py pipeline. Importantly, the methodologies presented here can be applied and expanded to any reasonnably sized dataset. 
 
-The packges used are loaded using the following set of commands. This assumes the packages have been installed using the install.package command or the Rstudio Tools>Install Packages menu. 
+The packages used are loaded using the following set of commands. This assumes the packages have been installed using the install.package command (commented below) or the Rstudio Tools>Install Packages menu. 
 
 ```{r}
+#comment out the line below if you need to install the packages
+#install.packages("dplyr","tidyr","reshape2","ineq","ggplot2","pheatmap","matrixStats")
+
 library(dplyr) # data wrangling and dataframe manipulation
 library(tidyr) # data wrangling and dataframe manipulation
 library(reshape2) # conversion between long and wide dataframe formats
 library(ineq) # calculating gini coefficient (and others)
 library(ggplot2) # versatile plotting package
 library(pheatmap) # clustering and plotting pretty heatmaps
+library(matrixStats) # to use the rowSd function
 ```
 
-In order to best benefit from this practise and use case, one needs to be familiar with R data structure and manipulation, mostly differentating vector, matrix and dataframes. A primer on the different data types (numeric, integer, character, etc) is also useful. 
+In order to best benefit from this practise and use case, one needs to be familiar with R data structure and manipulation, mostly differentating vector, matrix and dataframes. A primer on the different data types (numeric, integer, character, etc) is also useful.S Some general resources are mentioned towards the end of this tutorial. 
 
-The data used in this workshop corresponds to a GECKO screen in a cancer cell line, looking for enrichment of shRNA in cells treated with a genotoxic drug  for 1h. 4 libraries from each Baseline (T0), Treated (T3_T) and Untreated (T3_U) were sequenced. In the first part we will study the count files, in a second section the significance analysis. 
+The data used in this workshop corresponds to a GECKO screen in a cancer cell line, looking for enrichment of shRNA in cells treated with a genotoxic drug  for 1h. 4 libraries from each Baseline (T0), Treated (T3_T) and Untreated (T3_U) were sequenced. In the first part we will study the sgRNA coverage count files, in a second section their significance. 
 
 # Data Import and Formatting
 
-The pipeline places the count data in different folders. While there is a way to have R crawl through mulitple folders and import the data, we will assume here, for convenience, that the counts files have been placed in the same "counts" folder and renamed after the library ID. We will import the non-normalized counts. 
+The pipeline places the count data from each library in different folders. While there is a way to have R crawl through mulitple folders and import the data, we will assume here, for convenience, that the counts files have been placed in the same "counts" folder and renamed after the library ID. We will import the counts before normalization. 
 
-FiRst we write a function that takes the file name (and path), import the content into a dataframe, names the columns, and add a column containing the name of the file. 
+First we write a function that takes the file name (and path), import the content into a dataframe, names the columns, and add a column containing the name of the file. 
 
 ```{r}
 importCounts<-function(x){
@@ -65,14 +77,15 @@ We have now a large dataframe containing all the counts data
 
 # Summary Statistics and Normalization
 
-Here we will use mostly functions from the dplyr package. for example to determine the total number of counts in each library
+Here we will use mostly functions from the dplyr package. for example to determine the total number of counts in each library, N of sgRNA, N of covered sgRNA, Fraction of covered sgRNA.
 
 ```{r}
-totalCounts<-CountSg %>% group_by(Library) %>% summarize(Total=sum(value))
+totalCounts<-CountSg %>% group_by(Library) %>% summarize(Total=sum(value),Ntotal=length(value),Ncovered=length(value[value>0]),FracCovered=length(value[value>0])/length(value))
+
 totalCounts
 ```
 
-We can therefore normalized the counts to the total number of counts in each library and multiply by 1E6 to get an RPM (read per million) unit. For this we can use the function dplyr::mutate, which can assign tghe results of an operation to a new column. But before we specigy the grouping variable. 
+We can therefore normalized the counts to the total number of counts in each library and multiply by 1E6 to get an RPM (read per million) unit. For this we can use the function dplyr::mutate, which can assign the results of an operation to a new column. But before we specify the grouping variable. 
 
 
 ```{r}
@@ -88,22 +101,19 @@ CountSg %>% group_by(Library) %>% summarize(Total=sum(RPM))
 
 # plotting cumulative distribution of counts
 
-Let's now look at the distribution of RPM in each library. For this, we can use the ggplot2 package to plot the cumulative distribution function. Which is similar to the Lorenz plot generated by PinAPL-Py. Let's start with one library.
-
-
-let's start with one library using the dplyr::filter command
+Let's now look at the distribution of RPM in each library. For this, we can use the ggplot2 package to plot the cumulative distribution function. Which is similar to the Lorenz plot generated by PinAPL-Py. let's start with one library, extracting the corresponding data using the dplyr::filter command
 
 ```{r}
 C1<-filter(CountSg,Library=="I1R1T0_1")
 ```
 
-A typical ggplot command starts with the `ggplot` fucntion, which specifies the dataframe and the variable to use in the "aesthetic" (x, y, colors, sizes, etc, etc). This function is them modified by adding the type of plot desired, here stat_ecdf(). The RPM values are following an exponential distribution (lots of low covered sgRNA), we will therefore plot their log10. In order to also represent the sgRNA that are not covered in the library (RPM=0), we will add a small number to all RPM. Finally, we specific the size of the plot (in inches) in the header. 
+A typical ggplot command starts with the `ggplot` fucntion, which specifies the dataframe and the variable to use in the "aesthetic" (x, y, colors, sizes, etc, etc). This function is then modified by adding the type of plot desired, here stat_ecdf(). The RPM values are following an exponential distribution (lots of low covered sgRNA, few highly covered), we will therefore plot their log10(RPM) to dampen the difference and transform into a normal distribution. In order to also represent the sgRNA that are not covered in the library (RPM=0), we will add a small number to all RPM. Finally, we specific the size of the plot (in inches) in the header. 
 
 ```{r fig.width=4, fig.height=4}
 ggplot(C1,aes(log10(RPM+0.01)))+stat_ecdf()
 ```
 
-We can now change a bit the labels and the size of the font to make it prettier
+We can now change a bit the labels and the size of the font to make it prettier.
 
 ```{r fig.width=4, fig.height=4}
 ggplot(C1,aes(log10(RPM+0.01)))+stat_ecdf()+
@@ -111,7 +121,7 @@ ggplot(C1,aes(log10(RPM+0.01)))+stat_ecdf()+
   xlab("log10(RPM)")+
   theme(text=element_text(size=20))
 ```
- and now we can plot all libraies on the same plot, by starting from the full datafrane and adding a color variable to the aesthetic, (adn adjusting the)and adjusting panel wiodth to make room for the legend)
+ and now we can plot all libraries on the same plot, by starting from the full datafrane and adding a color variable to the aesthetic, (and adjusting panel width to make room for the legend).
  
 ```{r fig.width=5, fig.height=4}
 ggplot(CountSg,aes(log10(RPM+0.01),col=Library))+stat_ecdf()+
@@ -120,7 +130,7 @@ ggplot(CountSg,aes(log10(RPM+0.01),col=Library))+stat_ecdf()+
   theme(text=element_text(size=20))
 ```
 
-Now, this is too many libraries to visualize on one plot, we shoudl be able to separate them by timepoint and condition. We need to add another field to the dataframe. For this we will use the function dplyr::mutate seen before and perfrom a logical test based on the name of the library using grepl. grepl returns TRUE if the queries string is present in the tested string, FALSE otherwise. The function `ifelse` will assign the type to the type variable, as a result of this test. 
+Now, this is too many libraries to visualize on one plot, we should be able to separate them by timepoint and condition. We need to add another field to the dataframe. For this we will use the function `dplyr::mutate` seen before and perfrom a logical test based on the name of the library using `grepl`. `grepl` returns TRUE if the queried string is present in the tested string, FALSE otherwise. The function `ifelse` will assign the type to the type variable, as a result of this test. 
 
 ```{r}
 CountSg<-mutate(CountSg,type=ifelse(grepl("T0",Library),"Baseline","T3"))
@@ -131,7 +141,7 @@ we can verify the new field, by listing the unique columns
 ```{r}
 CountSg %>% select(Library,type) %>% unique()
 ```
- and we can now use the fucntion facet_wrap in ggplot to separate each type on a separate panel, increaseing the width (resp heigth) to make room if we display them in a row (resp. column)
+ and we can now use the function `facet_wrap` in ggplot to separate each type on a separate panel, increasing the width (resp. height) to make room if we display them in a row (resp. column)
  
  
 ```{r fig.width=8, fig.height=4}
@@ -142,14 +152,14 @@ ggplot(CountSg,aes(log10(RPM+0.01),col=Library))+stat_ecdf()+
   facet_wrap(~type,ncol=3)
 ```
 
-We can clearly see that some selection happened in the treated sample. Let's calculte the gini coefficient for each library. this is provided by the function ineq::ineq
+We can clearly see that some selection happened in the treated sample. Let's calculte the gini coefficient for each library. This is provided by the function `ineq::ineq`
 
 ```{r}
 gini<-CountSg %>% group_by(Library,type) %>% summarize(gini=ineq(RPM,type="Gini"))
 gini
 ```
 
-Let's plot the corresponding bar graph using the geom_bar function. Beause the value to plot is directly given by the gini field and that no math or calculations are needed, we need to specific stat="identity"
+Let's plot the corresponding bar graph using the geom_bar function. Beause the value to plot is directly given by the gini field and that no math or calculations are needed, we need to specify `stat="identity"`
 
 ```{r fig.width=5, fig.height=4}
 ggplot(gini,aes(Library,gini,fill=type))+geom_bar(stat="identity")+
@@ -158,12 +168,12 @@ ggplot(gini,aes(Library,gini,fill=type))+geom_bar(stat="identity")+
   theme(text=element_text(size=14))
 ```
 
-Now this is not pretty, we can rotate the x axis labels in the theme variable. But before we need to change the levels of the Name and type variable so that they are not plotted in alphabetical order. 
+Now this is not pretty, we can rotate the x axis labels in the `theme` variable. But before we need to change the levels of the Name and type variable so that they are not plotted in alphabetical order, but in the order we want.
 
 ```{r}
 gini$Library<-factor(gini$Library,levels=c("I1R1T0_1","I1R2T0_1","I2R1T0_1","I2R2T0_1","I1R1T3_U","I1R2T3_U","I2R1T3_U","I2R2T3_U","I1R1T3_T","I1R2T3_T","I2R1T3_T","I2R2T3_T"))
 ```
-Now we can replot, rotatign the x axiss
+Now we can replot, rotating the x axiss
 
 ```{r fig.width=5, fig.height=4}
 ggplot(gini,aes(Library,gini,fill=type))+geom_bar(stat="identity")+
@@ -176,13 +186,13 @@ ggplot(gini,aes(Library,gini,fill=type))+geom_bar(stat="identity")+
 
 ## Principal component
 
-Selection has happened on all treated samples, but it is not clear wether the same sgRNAs are being selected. We can investigate the similarity in RPM profile by calculating the fisrt two principal components. For this we first need to generate a matrix of sgRNA x Library using the function reshape2:dcast
+Selection has happened on all treated samples, but it is not clear whether the same sgRNAs are being selected. We can investigate the similarity in RPM profile by calculating the first two principal components. For this, we first need to generate a matrix of sgRNA x Library using the function `reshape2:dcast`
 
 ```{r}
 CountSgMat<-dcast(data=CountSg,sgRNA~Library,value.var="RPM")
 head(CountSgMat)
 ```
-We can now convert this dataframe into a matrix, by assinging sgRNA field to rownames. 
+We can now convert this dataframe into a matrix, by assigning sgRNA field to rownames. 
 ```{r}
 rownames(CountSgMat)<-CountSgMat$sgRNA
 CountSgMat<-select(CountSgMat,-sgRNA)
@@ -191,7 +201,7 @@ CountSgMat<-as.matrix(CountSgMat)
 
 
 
-now I can calcualte the principal components
+now I can calculate the principal components:
 
 ```{r}
 pca<-prcomp(CountSgMat)
@@ -204,7 +214,7 @@ In order to use ggplot to plot the PC, I need to convert into a dataframe and ad
 pca<-as.data.frame(pca$rotation)
 pca<-mutate(pca,Library=rownames(pca))
 ```
-I can now plot using ggplot 
+We can now plot using ggplot 
 
 ```{r fig.width=5, fig.height=4}
 ggplot(pca,aes(PC1,PC2,col=Library))+geom_point()
@@ -233,18 +243,190 @@ ggplot(pca,aes(PC1,PC2,col=Library))+geom_point(size=3, alpha=0.5)+
 
 ## clustering and heatmap
 
-We can use the same XX
+We can use the same  matrix to cluster the samples and plot a heatmap of the RPM. Instead of using all sgRNA for clustering, we will only use the top 500 most variable ones, which should capture most of the variance. 
+
+```{r}
+CountSgMat<-dcast(data=CountSg,sgRNA~Library,value.var="RPM")
+rownames(CountSgMat)<-CountSgMat$sgRNA
+CountSgMat<-select(CountSgMat,-sgRNA)
+CountSgMat$sd<-rowSds(as.matrix(CountSgMat))
+
+CountSgMat500<-top_n(CountSgMat,500,sd)
+CountSgMat500<-select(CountSgMat500,-sd)
+CountSgMat500<-as.matrix(CountSgMat500)
+```
+
+Now I can use pheatmap function to do both clustering and plotting
+
+```{r}
+pheatmap(CountSgMat500)
+```
+
+The color directly reflects the RPM level. In order to highlight the differences between samples, we can rescale each RPM to a normal distribution, using the 'scale' argument. In that case the color scale represent the RPM on a z-scale. IN addition, the dendrogam of the sgRNA is not infromative, so we can remove it. 
+
+```{r}
+pheatmap(CountSgMat500, scale="row", treeheight_row = 0)
+```
+
+To make it even prettier, we can add a sample annotation row, for this we need to prepare an annotation dataframe which rownames match the column names of the heatmap. 
+
+```{r}
+annotation<-data.frame(Library=colnames(CountSgMat500))
+```
+
+Similar we what we have done for the cumulative distribution function, we can add the library type, we can also add technical and biological replicate number. 
+
+```{r}
+annotation<-mutate(annotation,type=ifelse(grepl("T0",Library),"Baseline","T3"))
+annotation<-mutate(annotation,type=ifelse(grepl("T3_T",Library),"treated_T3",type))
+annotation<-mutate(annotation,type=ifelse(grepl("T3_U",Library),"untreated_T3",type))
+
+annotation<-mutate(annotation,replicate=ifelse(grepl("R1",Library),"R1","R2"))
+annotation<-mutate(annotation,infection=ifelse(grepl("I1",Library),"I1","I2"))
+```
+
+Then we can add a row name and remove the Library column
+
+```{r}
+rownames(annotation)<-annotation$Library
+annotation<-select(annotation,-Library)
+```
+
+and add annotation color to the heatmap
+
+```{r}
+pheatmap(CountSgMat500, scale="row", treeheight_row = 0, annotation_col = annotation)
+```
+
+Each type of library clusters together and I1R2T3 drives most of the inter-sample variance. 
+
+# Comparing Libraries
+
+In this section, we will look at the results from PinAPL-Py statistical analysis, which gives us, for each treated library, the significance of enrichment, over the untreated libraries, using a negative binomial distribution model. 
+
+## import the enrichment data
+
+We first import the corresponding data, assuming here again that all files are located in the same 'enrichment' directory. We import them and group them into the same 'enrichSg' dataframe. 
+
+```{r}
+importEnr<-function(x){
+  f<-read.delim(x,header=TRUE,col.names=c("sgRNA","gene","RPM","control_mean","control_sd","FoldChange","pval","adj_pval","significant")) # edit header on the fly
+  f$Library<-x
+  return(f)
+}
+
+files <- list.files(path="./enrichment",pattern=".tsv",full.names = TRUE)
+enrichSg<-sapply(files,importEnr,simplify=FALSE)
+enrichSg<-do.call(rbind,enrichSg)
+rownames(enrichSg)<-NULL
+```
+
+We can now reformat the filename into a proper library name and select the columns we care about
+
+```{r}
+enrichSg<-separate(enrichSg, Library, sep="[./_]",into=c("pre1","pre2","folder","Library","ext1"),remove=TRUE)
+enrichSg<-select(enrichSg,sgRNA,gene,RPM,control_mean,control_sd,FoldChange,pval,adj_pval,significant,Library)
+```
+## basic statistics
+
+first let's remove the control non targetign RNA and the sgRNA tagertign miRNA. 
+```{r}
+enrichSg %>% 
+  filter(!grepl("[Cc]ontrol",enrichSg$gene) & !grepl("hsa-",enrichSg$gene)) %>% 
+  group_by(Library) %>% 
+  summarize(Ntotal=length(sgRNA), Nsig=length(sgRNA[significant=="True"]))
+
+```
+
+calculate the number of sgRNA that are significant for each gene
+
+```{r}
+enrichSgSigGenes<-enrichSg %>% 
+  filter(!grepl("[Cc]ontrol",enrichSg$gene) & !grepl("hsa-",enrichSg$gene)) %>% 
+  filter(significant=="True") %>%
+  group_by(Library,gene) %>% 
+  summarize(NSig=length(sgRNA))
+
+enrichSgSigGenes
+```
+
+How many significant genes in each singificance category? 
+
+```{r}
+Ngenes<-enrichSgSigGenes %>% group_by(Library,NSig) %>% summarize(N=length(gene))
+Ngenes
+```
+ which we can cast as a nice table
+ 
+ 
+```{r}
+dcast(Ngenes,Library~NSig,value.var="N")
+
+```
+
+Finally we can determine which genes are enriched in at least 2 replicates, through any sgRNA
+
+```{r}
+enrichSg %>% 
+  filter(!grepl("[Cc]ontrol",enrichSg$gene) & !grepl("hsa-",enrichSg$gene)) %>% 
+  filter(significant=="True") %>%
+  select(Library,gene) %>% 
+  unique() %>%
+  group_by(gene) %>% 
+  summarize(NLib=length(Library)) %>% 
+  group_by(NLib) %>%
+  summarize(Ngene=length(gene))
+```
+
+I can now export the list of genes replicated in 4 libraries using the 'write.table' function. 
+
+```{r}
+
+tmp<-enrichSg %>% 
+  filter(!grepl("[Cc]ontrol",enrichSg$gene) & !grepl("hsa-",enrichSg$gene)) %>% 
+  filter(significant=="True") %>%
+  select(Library,gene) %>% 
+  unique() %>%
+  group_by(gene) %>% 
+  summarize(NLib=length(Library)) %>% 
+  filter(NLib==4)
+  
+  
+write.table(tmp,"GeneRep4.txt",sep="\t",quote = FALSE,row.names = FALSE)
+```
+
+
+## Plotting enrichment
+
+For each sgRNA in each library, we will plot the RPM as a function of the control mean
+```{r, fig.width=5, fig.height=5}
+ggplot(enrichSg,aes(log10(control_mean+0.1),log10(RPM+0.1)))+geom_point()+facet_wrap(~Library)
+```
+ coloring the singificant ones in red, and the rest in grey
+ 
+ 
+```{r, fig.width=5, fig.height=5}
+ggplot(enrichSg,aes(log10(control_mean+0.1),log10(RPM+0.1),col=significant))+geom_point()+
+  facet_wrap(~Library)+
+  scale_color_manual(values=c("grey","red"))
+```
+
+We can also generate a bar chart of the number of enriched sgRNA
+
+```{r}
+ggplot(enrichSg,aes(Library,fill=significant))+geom_bar()
+```
 
 
 
 # Other resources
 
-I enjoy the blog from Steven Turner "Getting Genetics Done" http://www.gettinggeneticsdone.com, which provides great example of R/bioconductor applied to genomics. 
+* I enjoy the blog from Steven Turner "Getting Genetics Done" http://www.gettinggeneticsdone.com, which provides great example of R/bioconductor applied to genomics. 
 
-For a more classic trainign in R and bioconductor, refered to the excellent tutorial from Thomas Girk http://manuals.bioinformatics.ucr.edu/home/R_BioCondManual 
+* For a more classic trainign in R and bioconductor, refered to the excellent tutorial from Thomas Girk http://manuals.bioinformatics.ucr.edu/home/R_BioCondManual 
 
-Finally, there are a number of chearsheet, that you may want to keep close to you. 
-dplyr & tidyr https://www.rstudio.com/wp-content/uploads/2015/02/data-wrangling-cheatsheet.pdf
-ggplot https://www.rstudio.com/wp-content/uploads/2015/03/ggplot2-cheatsheet.pdf
-colors https://www.nceas.ucsb.edu/~frazier/RSpatialGuides/colorPaletteCheatsheet.pdf
+* Finally, there are a number of chearsheet, that you may want to keep close to you. 
+  + dplyr & tidyr https://www.rstudio.com/wp-content/uploads/2015/02/data-wrangling-cheatsheet.pdf
+  + ggplot https://www.rstudio.com/wp-content/uploads/2015/03/ggplot2-cheatsheet.pdf
+  + colors https://www.nceas.ucsb.edu/~frazier/RSpatialGuides/colorPaletteCheatsheet.pdf
 
