@@ -11,13 +11,13 @@ output:
     highlight: tango  # specifies the syntax highlighting style
 ---
 
-In this notebook, we will introdcue a few R packages that can be handy to manipulate, summarize and plot the data coming from the PinAPL-py pipeline. Importantly, the methodologies presented here can be applied and expanded to any reasonnably sized dataset. 
+In this notebook, we will introdcue a few R packages that can be handy to manipulate, summarize and plot the data coming from the [PinAPL-py](http://pinapl-py.ucsd.edu) pipeline. Importantly, the methodologies presented here can be applied and expanded to any reasonnably sized dataset. 
 
 The packages used are loaded using the following set of commands. This assumes the packages have been installed using the install.package command (commented below) or the Rstudio Tools>Install Packages menu. 
 
 ```{r}
 #comment out the line below if you need to install the packages
-#install.packages("dplyr","tidyr","reshape2","ineq","ggplot2","pheatmap","matrixStats")
+#install.packages(c("dplyr","tidyr","reshape2","ineq","ggplot2","pheatmap","matrixStats"))
 
 library(dplyr) # data wrangling and dataframe manipulation
 library(tidyr) # data wrangling and dataframe manipulation
@@ -186,27 +186,26 @@ ggplot(gini,aes(Library,gini,fill=type))+geom_bar(stat="identity")+
 
 ## Principal component
 
-Selection has happened on all treated samples, but it is not clear whether the same sgRNAs are being selected. We can investigate the similarity in RPM profile by calculating the first two principal components. For this, we first need to generate a matrix of sgRNA x Library using the function `reshape2:dcast`
+Selection has happened on all treated samples, but it is not clear whether the same sgRNAs are being selected. We can investigate the similarity in RPM profiles by calculating the first two principal components. For this, we first need to generate a matrix of sgRNA x Library using the function `reshape2:dcast`
 
 ```{r}
 CountSgMat<-dcast(data=CountSg,sgRNA~Library,value.var="RPM")
 head(CountSgMat)
 ```
-We can now convert this dataframe into a matrix, by assigning sgRNA field to rownames. 
+We can now convert this dataframe into a matrix, by assigning sgRNA field to the row names. 
+
 ```{r}
 rownames(CountSgMat)<-CountSgMat$sgRNA
 CountSgMat<-select(CountSgMat,-sgRNA)
 CountSgMat<-as.matrix(CountSgMat)
 ```
 
-
-
 now I can calculate the principal components:
 
 ```{r}
 pca<-prcomp(CountSgMat)
 ```
-This is a list of two matrices, one for the standard deviation of each PC (pca$sdev) and one with the values of each PC (pca$rotation). 
+This is a list of two matrices, one for the standard deviation of each PC (`pca$sdev`) and one with the values of each PC (`pca$rotation`). 
 
 In order to use ggplot to plot the PC, I need to convert into a dataframe and add the name of each library as a new field to the pca
 
@@ -231,7 +230,7 @@ ggplot(pca,aes(PC1,PC2,col=Library))+geom_point(size=3, alpha=0.5)+
   
 ```
 
-We clearly see that all Baseline are similar, all untreated are similar, but each treated is very different, with a very strong outlier. Can I use custome colors and add some labels? 
+We clearly see that all Baseline are similar, all untreated are similar, but each treated is very different, with a very strong outlier. Can I use custom colors and add some labels? 
 
 ```{r fig.width=5, fig.height=4}
 
@@ -243,7 +242,7 @@ ggplot(pca,aes(PC1,PC2,col=Library))+geom_point(size=3, alpha=0.5)+
 
 ## clustering and heatmap
 
-We can use the same  matrix to cluster the samples and plot a heatmap of the RPM. Instead of using all sgRNA for clustering, we will only use the top 500 most variable ones, which should capture most of the variance. 
+We can use the same  matrix to cluster the samples and plot a heatmap of the RPM. Instead of using all sgRNAs for clustering, we will only use the top 500 most variable ones, which should capture most of the variance. 
 
 ```{r}
 CountSgMat<-dcast(data=CountSg,sgRNA~Library,value.var="RPM")
@@ -262,7 +261,7 @@ Now I can use pheatmap function to do both clustering and plotting
 pheatmap(CountSgMat500)
 ```
 
-The color directly reflects the RPM level. In order to highlight the differences between samples, we can rescale each RPM to a normal distribution, using the 'scale' argument. In that case the color scale represent the RPM on a z-scale. IN addition, the dendrogam of the sgRNA is not infromative, so we can remove it. 
+The color directly reflects the RPM level. In order to highlight the differences between samples, we can rescale each sgRNA RPM to a normal distribution, using the 'scale' argument. In that case the color scale represent the RPM on a z-scale. In addition, the dendrogam of the sgRNA is not informative, so we can remove it. 
 
 ```{r}
 pheatmap(CountSgMat500, scale="row", treeheight_row = 0)
@@ -274,7 +273,7 @@ To make it even prettier, we can add a sample annotation row, for this we need t
 annotation<-data.frame(Library=colnames(CountSgMat500))
 ```
 
-Similar we what we have done for the cumulative distribution function, we can add the library type, we can also add technical and biological replicate number. 
+Similar we what we have done for the cumulative distribution function, we can add the library type, we can also add technical and biological replicate number.
 
 ```{r}
 annotation<-mutate(annotation,type=ifelse(grepl("T0",Library),"Baseline","T3"))
@@ -321,7 +320,7 @@ enrichSg<-do.call(rbind,enrichSg)
 rownames(enrichSg)<-NULL
 ```
 
-We can now reformat the filename into a proper library name and select the columns we care about
+We can now reformat the filename into a proper library name and select the columns that we care about
 
 ```{r}
 enrichSg<-separate(enrichSg, Library, sep="[./_]",into=c("pre1","pre2","folder","Library","ext1"),remove=TRUE)
@@ -329,7 +328,8 @@ enrichSg<-select(enrichSg,sgRNA,gene,RPM,control_mean,control_sd,FoldChange,pval
 ```
 ## basic statistics
 
-first let's remove the control non targetign RNA and the sgRNA tagertign miRNA. 
+first let's remove the control non targeting RNA and the sgRNA tagertign miRNA. 
+
 ```{r}
 enrichSg %>% 
   filter(!grepl("[Cc]ontrol",enrichSg$gene) & !grepl("hsa-",enrichSg$gene)) %>% 
@@ -338,7 +338,7 @@ enrichSg %>%
 
 ```
 
-calculate the number of sgRNA that are significant for each gene
+calculate the number of sgRNAs that are significant for each gene
 
 ```{r}
 enrichSgSigGenes<-enrichSg %>% 
@@ -350,13 +350,14 @@ enrichSgSigGenes<-enrichSg %>%
 enrichSgSigGenes
 ```
 
-How many significant genes in each singificance category? 
+How many significant genes in each significance category? 
 
 ```{r}
 Ngenes<-enrichSgSigGenes %>% group_by(Library,NSig) %>% summarize(N=length(gene))
 Ngenes
 ```
- which we can cast as a nice table
+
+which we can cast as a nice table:
  
  
 ```{r}
@@ -364,7 +365,7 @@ dcast(Ngenes,Library~NSig,value.var="N")
 
 ```
 
-Finally we can determine which genes are enriched in at least 2 replicates, through any sgRNA
+Finally, we can determine which genes are enriched in at least 2 replicates, through any sgRNAs
 
 ```{r}
 enrichSg %>% 
@@ -398,11 +399,13 @@ write.table(tmp,"GeneRep4.txt",sep="\t",quote = FALSE,row.names = FALSE)
 
 ## Plotting enrichment
 
-For each sgRNA in each library, we will plot the RPM as a function of the control mean
+For each sgRNA in each library, we will plot the RPM as a function of the control mean.
+
 ```{r, fig.width=5, fig.height=5}
 ggplot(enrichSg,aes(log10(control_mean+0.1),log10(RPM+0.1)))+geom_point()+facet_wrap(~Library)
 ```
- coloring the singificant ones in red, and the rest in grey
+
+coloring the significant ones in red, and the rest in grey
  
  
 ```{r, fig.width=5, fig.height=5}
@@ -411,7 +414,7 @@ ggplot(enrichSg,aes(log10(control_mean+0.1),log10(RPM+0.1),col=significant))+geo
   scale_color_manual(values=c("grey","red"))
 ```
 
-We can also generate a bar chart of the number of enriched sgRNA
+We can also generate a bar chart of the number of enriched sgRNAs.
 
 ```{r}
 ggplot(enrichSg,aes(Library,fill=significant))+geom_bar()
@@ -423,9 +426,9 @@ ggplot(enrichSg,aes(Library,fill=significant))+geom_bar()
 
 * I enjoy the blog from Steven Turner "Getting Genetics Done" http://www.gettinggeneticsdone.com, which provides great example of R/bioconductor applied to genomics. 
 
-* For a more classic trainign in R and bioconductor, refered to the excellent tutorial from Thomas Girk http://manuals.bioinformatics.ucr.edu/home/R_BioCondManual 
+* For a more classic training in R and bioconductor, refer to the excellent tutorial from Thomas Girke http://manuals.bioinformatics.ucr.edu/home/R_BioCondManual 
 
-* Finally, there are a number of chearsheet, that you may want to keep close to you. 
+* Finally, there are a number of cheatsheets, that you may want to keep close to you. 
   + dplyr & tidyr https://www.rstudio.com/wp-content/uploads/2015/02/data-wrangling-cheatsheet.pdf
   + ggplot https://www.rstudio.com/wp-content/uploads/2015/03/ggplot2-cheatsheet.pdf
   + colors https://www.nceas.ucsb.edu/~frazier/RSpatialGuides/colorPaletteCheatsheet.pdf
